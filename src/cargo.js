@@ -1,5 +1,8 @@
 import fs from 'fs';
 import toml from 'toml';
+import path from 'path';
+import loaderUtils from 'loader-utils';
+import { spawnSync } from 'child_process';
 
 export function buildProjectForImport(path) {
     let projectRoot = resolveProjectRoot(path);
@@ -8,6 +11,18 @@ export function buildProjectForImport(path) {
     if (projectInvalid) {
         throw new Error(projectInvalid);
     }
+
+    let buildResults = runCargoBuild();
+
+    if (buildResults.error) {
+        throw new Error(buildResults.error);
+    }
+
+    let jsLoader = runBindgenBuild(buildResults.wasmPath);
+
+    console.log('loader', jsLoader)
+
+    return loaderUtils.stringifyRequest(this, jsLoader);
 }
 
 function cargoManifestForRoot(projectRoot) {
@@ -45,4 +60,34 @@ function cargoProjectIsInvalid(projectRoot) {
     if (!(manifest.dependencies && manifest.dependencies['wasm-bindgen'])) {
         return 'Cargo project must list wasm-bindgen as a dependency';
     }
+}
+
+function runCargoBuild() {
+    let buildProc = spawnSync('cargo', ['+nightly', 'build', '--target', 'wasm32-unknown-unknown', '--message-format', 'json']);
+    let buildError = buildProc.stderr.toString().trim();
+    let buildResults = parseCargoResults(buildProc.stdout.toString());
+    let buildOutput;
+
+    for (let result of buildResults) {
+        if (result.filenames && ~result.filenames[0].indexOf('.wasm')) {
+            buildOutput = result.filenames[0];
+        }
+    }
+
+    return {
+        'wasmPath': buildOutput,
+        'error': ~buildError.indexOf('error') ? buildError : '',
+    };
+}
+
+function runBindgenBuild(wasmPath) {
+    let buildProc = spawnSync('wasm-bindgen', [wasmPath, '--out-dir', path.dirname(wasmPath)]);
+
+    return `${path.dirname(wasmPath)}/${path.basename(wasmPath, 'wasm')}js`;
+}
+
+function parseCargoResults(results) {
+    return results.split('\n').slice(0, -1).map(line => {
+        return JSON.parse(line)
+    });
 }
