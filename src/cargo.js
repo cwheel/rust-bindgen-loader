@@ -1,28 +1,25 @@
 import fs from 'fs';
 import toml from 'toml';
-import path from 'path';
-import loaderUtils from 'loader-utils';
 import { spawnSync } from 'child_process';
 
-export function buildProjectForImport(path) {
+export default function buildProjectForImport(path, options) {
     let projectRoot = resolveProjectRoot(path);
-    let projectInvalid = cargoProjectIsInvalid(projectRoot);
+    let validationResult = validateCargoProject(projectRoot);
 
-    if (projectInvalid) {
-        throw new Error(projectInvalid);
+    if (validationResult instanceof Error) {
+        throw validationResult;
     }
 
-    let buildResults = runCargoBuild();
+    let buildResults = runCargoBuild(
+        options.release || true,
+        options.buildArgs || []
+    );
 
-    if (buildResults.error) {
-        throw new Error(buildResults.error);
+    if (buildResults.error instanceof Error) {
+        throw buildResults.error;
     }
 
-    let jsLoader = runBindgenBuild(buildResults.wasmPath);
-
-    console.log('loader', jsLoader)
-
-    return loaderUtils.stringifyRequest(this, jsLoader);
+    return buildResults.wasmPath;
 }
 
 function cargoManifestForRoot(projectRoot) {
@@ -48,22 +45,27 @@ function resolveProjectRoot(path) {
     return projectRoot;
 }
 
-function cargoProjectIsInvalid(projectRoot) {
+function validateCargoProject(projectRoot) {
     let manifestPath = cargoManifestForRoot(projectRoot);
     let manifestToml = fs.readFileSync(manifestPath);
     let manifest = toml.parse(manifestToml);
 
     if (!(manifest.lib && manifest.lib['crate-type'][0] === 'cdylib')) {
-        return 'Cargo project must have crate-type of `cdylib`';
+        return new Error('Cargo project must have crate-type of `cdylib`');
     }
 
     if (!(manifest.dependencies && manifest.dependencies['wasm-bindgen'])) {
-        return 'Cargo project must list wasm-bindgen as a dependency';
+        return new Error('Cargo project must list wasm-bindgen as a dependency');
     }
 }
 
-function runCargoBuild() {
-    let buildProc = spawnSync('cargo', ['+nightly', 'build', '--target', 'wasm32-unknown-unknown', '--message-format', 'json']);
+function runCargoBuild(release, userBuildArgs) {
+    let buildArgs = ['+nightly', 'build', '--target', 'wasm32-unknown-unknown', '--message-format', 'json'];
+    buildArgs.concat(userBuildArgs);
+
+    if (release) buildArgs.push('--release');
+
+    let buildProc = spawnSync('cargo', buildArgs);
     let buildError = buildProc.stderr.toString().trim();
     let buildResults = parseCargoResults(buildProc.stdout.toString());
     let buildOutput;
@@ -76,14 +78,8 @@ function runCargoBuild() {
 
     return {
         'wasmPath': buildOutput,
-        'error': ~buildError.indexOf('error') ? buildError : '',
+        'error': ~buildError.indexOf('error') ? new Error(buildError) : undefined,
     };
-}
-
-function runBindgenBuild(wasmPath) {
-    let buildProc = spawnSync('wasm-bindgen', [wasmPath, '--out-dir', path.dirname(wasmPath)]);
-
-    return `${path.dirname(wasmPath)}/${path.basename(wasmPath, 'wasm')}js`;
 }
 
 function parseCargoResults(results) {
