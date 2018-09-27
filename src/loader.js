@@ -10,7 +10,7 @@ export default function load(source) {
     let jsRequest = loaderUtils.stringifyRequest(this, jsPath);
 
     return `module.exports.wasmBooted = import(${jsRequest}).then(wasmModule => {
-      const keys = Object.keys(wasmModule);
-      for (let key of keys) module.exports[key] = wasmModule[key];
+        const keys = Object.keys(wasmModule);
+        for (let key of keys) module.exports[key] = wasmModule[key];
     })`;
 }

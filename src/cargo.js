@@ -11,6 +11,7 @@ export default function buildProjectForImport(path, options) {
     }
 
     let buildResults = runCargoBuild(
+        projectRoot,
         options.release || true,
         options.buildArgs || []
     );
@@ -55,30 +56,35 @@ function validateCargoProject(projectRoot) {
     }
 
     if (!(manifest.dependencies && manifest.dependencies['wasm-bindgen'])) {
-        return new Error('Cargo project must list wasm-bindgen as a dependency');
+        return new Error('Cargo project must list `wasm-bindgen` as a dependency');
     }
 }
 
-function runCargoBuild(release, userBuildArgs) {
+function runCargoBuild(cwd, release, userBuildArgs) {
     let buildArgs = ['+nightly', 'build', '--target', 'wasm32-unknown-unknown', '--message-format', 'json'];
     buildArgs.concat(userBuildArgs);
 
     if (release) buildArgs.push('--release');
 
-    let buildProc = spawnSync('cargo', buildArgs);
+    let buildProc = spawnSync('cargo', buildArgs, { cwd });
     let buildError = buildProc.stderr.toString().trim();
     let buildResults = parseCargoResults(buildProc.stdout.toString());
-    let buildOutput;
+    let compilerOutput = '';
+    let buildOutputFile;
 
     for (let result of buildResults) {
         if (result.filenames && ~result.filenames[0].indexOf('.wasm')) {
-            buildOutput = result.filenames[0];
+            buildOutputFile = result.filenames[0];
+        }
+
+        if (result.message && result.reason === 'compiler-message') {
+            compilerOutput += result.message.rendered;
         }
     }
 
     return {
-        'wasmPath': buildOutput,
-        'error': ~buildError.indexOf('error') ? new Error(buildError) : undefined,
+        'wasmPath': buildOutputFile,
+        'error': ~buildError.indexOf('error') ? new Error(compilerOutput) : undefined,
     };
 }
 

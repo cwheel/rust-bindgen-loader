@@ -1,0 +1,7 @@
+[package]
+name = "invalidDeps"
+version = "0.1.0"
+authors = ["Cameron Wheeler <cwheel@users.noreply.github.com>"]
+
+[lib]
+crate-type = ["cdylib"]
