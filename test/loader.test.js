@@ -8,7 +8,7 @@ function buildProject(project, options = {}) {
         entry: `./${project}/index.js`,
         context: path.resolve(__dirname, 'fixtures'),
         output: {
-            path: path.resolve(__dirname, '../dist')
+            path: path.resolve(__dirname, '../test_dist')
         },
         module: {
             rules: [
