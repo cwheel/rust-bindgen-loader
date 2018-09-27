@@ -45,5 +45,5 @@ wasmBooted.then(() => {
 
 ### Loader options
 
-`release` (boolean) - Build the imported crate in release mode
-`buildArgs` (array) - Additional arguments to pass to cargo during the build
+- `release` (boolean) - Build the imported crate in release mode
+- `buildArgs` (array) - Additional arguments to pass to cargo during the build
